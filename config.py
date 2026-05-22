@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     WP_URL: str = "https://pethubonline.com"
     WP_USER: str = "jasonsarah2026"
     WP_APP_PASSWORD: str = "EIul 3KqI 3fY7 yLbk Ltva aPnj"
+    OPENAI_API_KEY: str = ""
     HEARTBEAT_INTERVAL: int = 120
     DB_PATH: str = "/var/lib/freelancer/projects/40416335/maintenance-agent/data/maintenance_data.json"
 

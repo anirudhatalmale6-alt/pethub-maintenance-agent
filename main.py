@@ -225,6 +225,9 @@ async def lifespan(app: FastAPI):
     # Security scan: every 3 days (Mon/Thu/Sun 3am UTC)
     scheduler.add_job(scheduled_security_scan, CronTrigger(day_of_week="mon,thu,sun", hour=3, minute=0), id="security_scan")
 
+    # Upgrade module scheduled jobs
+    scheduler.add_job(scheduled_image_analysis, CronTrigger(day_of_week="wed,sat", hour=8, minute=0), id="image_analysis")
+    scheduler.add_job(scheduled_stale_content_check, CronTrigger(day_of_week="mon,thu", hour=9, minute=0), id="stale_content")
     scheduler.start()
     await send_heartbeat()
     await log_message("info", "Maintenance Agent started")
@@ -445,3 +448,120 @@ async def maintenance_dashboard():
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("main:app", host="0.0.0.0", port=settings.API_PORT, reload=False)
+
+
+
+
+# ── Scheduled upgrade jobs ──────────────────────────────────────────
+
+async def scheduled_image_analysis():
+    """Scan images across site for optimization opportunities."""
+    try:
+        from image_optimizer import analyze_page_images
+        import base64
+        import httpx
+        await log_message("info", "Starting image optimization scan")
+        auth = "Basic " + base64.b64encode(f"{settings.WP_USER}:{settings.WP_APP_PASSWORD}".encode()).decode()
+        headers = {"Authorization": auth}
+        results = []
+        async with httpx.AsyncClient(timeout=15) as client:
+            for endpoint in ["pages", "posts"]:
+                r = await client.get(
+                    f"{settings.WP_URL}/wp-json/wp/v2/{endpoint}",
+                    headers=headers,
+                    params={"per_page": 50, "status": "publish"},
+                )
+                if r.status_code == 200:
+                    for item in r.json()[:15]:
+                        title = item.get("title", {}).get("rendered", "")
+                        url = item.get("link", "")
+                        content_html = item.get("content", {}).get("rendered", "")
+                        analysis = await analyze_page_images(url, content_html)
+                        analysis["title"] = title
+                        analysis["url"] = url
+                        results.append(analysis)
+        state["last_image_analysis"] = {
+            "scanned_at": datetime.now(timezone.utc).isoformat(),
+            "pages_analyzed": len(results),
+            "results": results,
+        }
+        record_scan("images", f"Analyzed {len(results)} pages for image optimization")
+        save_state()
+        await log_message("info", f"Image scan complete: {len(results)} pages analyzed")
+    except Exception as e:
+        logger.error(f"Image analysis failed: {e}")
+        add_error(f"Image analysis failed: {e}")
+        save_state()
+
+
+async def scheduled_stale_content_check():
+    """Find stale content that needs refreshing."""
+    try:
+        from content_refresher import identify_stale_content
+        import base64
+        import httpx
+        import re as regex
+        await log_message("info", "Starting stale content check")
+        auth = "Basic " + base64.b64encode(f"{settings.WP_USER}:{settings.WP_APP_PASSWORD}".encode()).decode()
+        headers = {"Authorization": auth}
+        pages = []
+        async with httpx.AsyncClient(timeout=15) as client:
+            for endpoint in ["pages", "posts"]:
+                r = await client.get(
+                    f"{settings.WP_URL}/wp-json/wp/v2/{endpoint}",
+                    headers=headers,
+                    params={"per_page": 50, "status": "publish"},
+                )
+                if r.status_code == 200:
+                    for item in r.json():
+                        content_html = item.get("content", {}).get("rendered", "")
+                        word_count = len(regex.sub(r"<[^>]+>", " ", content_html).split())
+                        pages.append({
+                            "id": item["id"],
+                            "title": item.get("title", {}).get("rendered", ""),
+                            "url": item.get("link", ""),
+                            "modified_date": item.get("modified_gmt", ""),
+                            "word_count": word_count,
+                        })
+        stale = await identify_stale_content(pages)
+        state["last_stale_content"] = {
+            "scanned_at": datetime.now(timezone.utc).isoformat(),
+            "total_pages": len(pages),
+            "stale_pages": stale,
+            "stale_count": len(stale),
+        }
+        record_scan("stale_content", f"Found {len(stale)} stale pages out of {len(pages)}")
+        save_state()
+        await log_message("info", f"Stale content check: {len(stale)} stale out of {len(pages)} pages")
+    except Exception as e:
+        logger.error(f"Stale content check failed: {e}")
+        add_error(f"Stale content check failed: {e}")
+        save_state()
+
+
+# ── AI-Powered Upgrade Endpoints ─────────────────────────────────────
+
+@app.post("/api/images/analyze")
+async def analyze_images():
+    """Analyze all page images for optimization opportunities."""
+    asyncio.create_task(scheduled_image_analysis())
+    return {"message": "Image analysis started", "status": "running"}
+
+
+@app.get("/api/images/results")
+async def get_image_results():
+    """Get latest image analysis results."""
+    return state.get("last_image_analysis", {"message": "No image analysis yet. Run /api/images/analyze first."})
+
+
+@app.post("/api/content/stale")
+async def find_stale_content():
+    """Find stale content that needs refreshing."""
+    asyncio.create_task(scheduled_stale_content_check())
+    return {"message": "Stale content check started", "status": "running"}
+
+
+@app.get("/api/content/stale/results")
+async def get_stale_content_results():
+    """Get latest stale content results."""
+    return state.get("last_stale_content", {"message": "No stale content data yet. Run /api/content/stale first."})

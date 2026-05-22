@@ -132,6 +132,8 @@ a:hover{text-decoration:underline}
     <button class="tab" data-tab="content">Content</button>
     <button class="tab" data-tab="security">Security</button>
     <button class="tab" data-tab="history">History</button>
+    <button class="tab" onclick="showTab('imageopt',this)" style="color:#a855f7">Image Optimizer</button>
+    <button class="tab" onclick="showTab('stalecontent',this)" style="color:#a855f7">Content Freshness</button>
   </div>
 
   <!-- Overview Tab -->
@@ -203,8 +205,11 @@ a:hover{text-decoration:underline}
   </div>
 </div>
 
+
+  <div id="imageopt" class="tab-content" style="display:none"><div class="section"><h2>Loading Image Optimizer...</h2></div></div>
+  <div id="stalecontent" class="tab-content" style="display:none"><div class="section"><h2>Loading Content Freshness...</h2></div></div>
 <script>
-const BASE = '';
+const BASE = window.location.pathname.replace(/\/$/, '');
 
 // Tab switching
 document.querySelectorAll('.tab').forEach(tab => {
@@ -689,6 +694,55 @@ async function init() {
 init();
 setInterval(loadStatus, 30000);
 setInterval(loadOverview, 60000);
+
+
+// ── Image Optimizer Tab ──
+async function loadImageOpt() {
+  const r = await fetch('/agents/maintenance/api/images/results');
+  const d = await r.json();
+  let html = '<div class="section"><h2>Image Optimization Analysis</h2>';
+  html += '<button class="btn btn-primary" onclick="fetch('/agents/maintenance/api/images/analyze',{method:' POST'}).then(()=>{alert('Image scan started!');setTimeout(loadImageOpt,15000)})">Run Image Scan</button><br><br>';
+  if (d.message) {
+    html += '<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;color:#94a3b8">' + d.message + '</div>';
+  } else {
+    html += '<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:16px;margin-bottom:16px"><span style="color:#94a3b8">Scanned: </span><span style="color:#3b82f6">' + (d.scanned_at||'').slice(0,19) + '</span> | <span style="color:#94a3b8">Pages: </span><span style="color:#22c55e">' + (d.pages_analyzed||0) + '</span></div>';
+    if (d.results && d.results.length) {
+      html += '<table class="results-table"><thead><tr><th>Page</th><th>Images</th><th>Missing Alt</th><th>No Lazy Load</th><th>Large Images</th></tr></thead><tbody>';
+      d.results.forEach(p => {
+        html += '<tr><td><a href="'+p.url+'" target="_blank" style="color:#3b82f6;text-decoration:none">'+p.title+'</a></td><td>'+(p.total_images||0)+'</td><td style="color:'+(p.missing_alt>0?'#ef4444':'#22c55e')+'">'+(p.missing_alt||0)+'</td><td style="color:'+(p.no_lazy_load>0?'#f59e0b':'#22c55e')+'">'+(p.no_lazy_load||0)+'</td><td style="color:'+(p.large_images>0?'#ef4444':'#22c55e')+'">'+(p.large_images||0)+'</td></tr>';
+      });
+      html += '</tbody></table>';
+    }
+  }
+  html += '</div>';
+  document.getElementById('imageopt').innerHTML = html;
+}
+
+// ── Content Freshness Tab ──
+async function loadStaleContent() {
+  const r = await fetch('/agents/maintenance/api/content/stale/results');
+  const d = await r.json();
+  let html = '<div class="section"><h2>Content Freshness Monitor</h2>';
+  html += '<button class="btn btn-primary" onclick="fetch('/agents/maintenance/api/content/stale',{method:' POST'}).then(()=>{alert('Stale content check started!');setTimeout(loadStaleContent,10000)})">Check Freshness</button><br><br>';
+  if (d.message) {
+    html += '<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;color:#94a3b8">' + d.message + '</div>';
+  } else {
+    html += '<div class="stats-grid">';
+    html += '<div class="stat-card"><div class="label">Total Pages</div><div class="value blue">'+(d.total_pages||0)+'</div></div>';
+    html += '<div class="stat-card"><div class="label">Stale Pages</div><div class="value '+(d.stale_count>0?'red':'green')+'">'+(d.stale_count||0)+'</div></div>';
+    html += '</div>';
+    if (d.stale_pages && d.stale_pages.length) {
+      html += '<table class="results-table"><thead><tr><th>Page</th><th>Last Modified</th><th>Days Since Update</th><th>Word Count</th></tr></thead><tbody>';
+      d.stale_pages.forEach(p => {
+        html += '<tr><td>'+(p.title||'-')+'</td><td>'+(p.modified_date||'-').slice(0,10)+'</td><td style="color:#ef4444">'+(p.days_stale||0)+'</td><td>'+(p.word_count||0)+'</td></tr>';
+      });
+      html += '</tbody></table>';
+    }
+  }
+  html += '</div>';
+  document.getElementById('stalecontent').innerHTML = html;
+}
+
 </script>
 </body>
 </html>

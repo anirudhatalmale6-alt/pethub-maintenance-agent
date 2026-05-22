@@ -132,8 +132,8 @@ a:hover{text-decoration:underline}
     <button class="tab" data-tab="content">Content</button>
     <button class="tab" data-tab="security">Security</button>
     <button class="tab" data-tab="history">History</button>
-    <button class="tab" onclick="showTab('imageopt',this)" style="color:#a855f7">Image Optimizer</button>
-    <button class="tab" onclick="showTab('stalecontent',this)" style="color:#a855f7">Content Freshness</button>
+    <button class="tab" data-tab="imageopt" style="color:#a855f7" onclick="activateTab(this,'imageopt')">Image Optimizer</button>
+    <button class="tab" data-tab="stalecontent" style="color:#a855f7" onclick="activateTab(this,'stalecontent')">Content Freshness</button>
   </div>
 
   <!-- Overview Tab -->
@@ -206,8 +206,8 @@ a:hover{text-decoration:underline}
 </div>
 
 
-  <div id="imageopt" class="tab-content" style="display:none"><div class="section"><h2>Loading Image Optimizer...</h2></div></div>
-  <div id="stalecontent" class="tab-content" style="display:none"><div class="section"><h2>Loading Content Freshness...</h2></div></div>
+  <div class="panel" id="panel-imageopt"><div class="section"><h2>Loading Image Optimizer...</h2></div></div>
+  <div class="panel" id="panel-stalecontent"><div class="section"><h2>Loading Content Freshness...</h2></div></div>
 <script>
 const BASE = window.location.pathname.replace(/\/$/, '');
 
@@ -218,6 +218,8 @@ document.querySelectorAll('.tab').forEach(tab => {
     document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
     tab.classList.add('active');
     document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+    if(tab.dataset.tab==='imageopt')loadImageOpt();
+    if(tab.dataset.tab==='stalecontent')loadStaleContent();
   });
 });
 
@@ -696,12 +698,21 @@ setInterval(loadStatus, 30000);
 setInterval(loadOverview, 60000);
 
 
-// ── Image Optimizer Tab ──
+// ── Tab Activation Helper ──
+function activateTab(btn, tabName) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('panel-' + tabName).classList.add('active');
+  if(tabName==='imageopt') loadImageOpt();
+  if(tabName==='stalecontent') loadStaleContent();
+}
+
 async function loadImageOpt() {
-  const r = await fetch('/agents/maintenance/api/images/results');
+  const r = await fetch(window.location.pathname.replace(/\/$/,'')+'/api/images/results');
   const d = await r.json();
   let html = '<div class="section"><h2>Image Optimization Analysis</h2>';
-  html += '<button class="btn btn-primary" onclick="fetch('/agents/maintenance/api/images/analyze',{method:' POST'}).then(()=>{alert('Image scan started!');setTimeout(loadImageOpt,15000)})">Run Image Scan</button><br><br>';
+  html += '<button class="btn btn-primary" id="runImageScanBtn">Run Image Scan</button><br><br>';
   if (d.message) {
     html += '<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;color:#94a3b8">' + d.message + '</div>';
   } else {
@@ -715,15 +726,20 @@ async function loadImageOpt() {
     }
   }
   html += '</div>';
-  document.getElementById('imageopt').innerHTML = html;
+  document.getElementById('panel-imageopt').innerHTML = html;
+  var btn = document.getElementById('runImageScanBtn');
+  if (btn) btn.addEventListener('click', function() {
+    var base = window.location.pathname.replace(/\/$/,'');
+    fetch(base+'/api/images/analyze',{method:'POST'}).then(function(){alert('Image scan started!');setTimeout(loadImageOpt,15000)});
+  });
 }
 
 // ── Content Freshness Tab ──
 async function loadStaleContent() {
-  const r = await fetch('/agents/maintenance/api/content/stale/results');
+  const r = await fetch(window.location.pathname.replace(/\/$/,'')+'/api/content/stale/results');
   const d = await r.json();
   let html = '<div class="section"><h2>Content Freshness Monitor</h2>';
-  html += '<button class="btn btn-primary" onclick="fetch('/agents/maintenance/api/content/stale',{method:' POST'}).then(()=>{alert('Stale content check started!');setTimeout(loadStaleContent,10000)})">Check Freshness</button><br><br>';
+  html += '<button class="btn btn-primary" id="runStaleCheckBtn">Check Freshness</button><br><br>';
   if (d.message) {
     html += '<div style="background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;color:#94a3b8">' + d.message + '</div>';
   } else {
@@ -740,7 +756,12 @@ async function loadStaleContent() {
     }
   }
   html += '</div>';
-  document.getElementById('stalecontent').innerHTML = html;
+  document.getElementById('panel-stalecontent').innerHTML = html;
+  var btn2 = document.getElementById('runStaleCheckBtn');
+  if (btn2) btn2.addEventListener('click', function() {
+    var base = window.location.pathname.replace(/\/$/,'');
+    fetch(base+'/api/content/stale',{method:'POST'}).then(function(){alert('Stale content check started!');setTimeout(loadStaleContent,10000)});
+  });
 }
 
 </script>

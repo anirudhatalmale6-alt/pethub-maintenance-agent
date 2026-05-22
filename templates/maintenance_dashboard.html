@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PetHub Maintenance Agent</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f172a;color:#e2e8f0;min-height:100vh}
+.header{background:linear-gradient(135deg,#1e293b,#0f172a);border-bottom:1px solid #334155;padding:16px 24px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-size:22px;font-weight:700;color:#f1f5f9}
+.header h1 span{color:#06b6d4}
+.header .controls{display:flex;gap:8px;align-items:center}
+.back-link{color:#3b82f6;text-decoration:none;font-size:13px;margin-right:16px}
+.back-link:hover{text-decoration:underline}
+.status-dot{width:10px;height:10px;border-radius:50%;background:#06b6d4;display:inline-block;margin-right:8px;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.container{max-width:1400px;margin:0 auto;padding:20px}
+.stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px}
+.stat-card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;transition:border-color .2s}
+.stat-card:hover{border-color:#06b6d4}
+.stat-card .label{font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.stat-card .value{font-size:28px;font-weight:700;color:#f1f5f9}
+.stat-card .value.teal{color:#06b6d4}
+.stat-card .value.green{color:#22c55e}
+.stat-card .value.yellow{color:#eab308}
+.stat-card .value.red{color:#ef4444}
+.stat-card .value.blue{color:#3b82f6}
+.btn{padding:8px 18px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:600;transition:all .2s}
+.btn-primary{background:#06b6d4;color:#fff}
+.btn-primary:hover{background:#0891b2}
+.btn-primary:disabled{background:#334155;color:#64748b;cursor:not-allowed}
+.btn-sm{padding:5px 12px;font-size:12px}
+.btn-danger{background:#ef4444;color:#fff}
+.btn-danger:hover{background:#dc2626}
+.btn-green{background:#22c55e;color:#fff}
+.btn-green:hover{background:#16a34a}
+.section{margin-bottom:24px}
+.section h2{font-size:18px;font-weight:600;color:#f1f5f9;margin-bottom:16px}
+.results-table{width:100%;border-collapse:collapse;background:#1e293b;border:1px solid #334155;border-radius:12px;overflow:hidden}
+.results-table th{text-align:left;padding:12px;font-size:12px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #334155;background:#0f172a}
+.results-table td{padding:12px;font-size:13px;border-bottom:1px solid #1e293b;color:#e2e8f0}
+.results-table tr:hover td{background:rgba(6,182,212,.05)}
+.grade-badge{display:inline-block;padding:4px 12px;border-radius:20px;font-size:13px;font-weight:700}
+.grade-A{background:rgba(34,197,94,.15);color:#22c55e}
+.grade-B{background:rgba(6,182,212,.15);color:#06b6d4}
+.grade-C{background:rgba(234,179,8,.15);color:#eab308}
+.grade-D{background:rgba(239,68,68,.15);color:#ef4444}
+.severity-badge{display:inline-block;padding:3px 10px;border-radius:6px;font-size:11px;font-weight:600;margin:2px}
+.severity-critical{background:rgba(239,68,68,.15);color:#ef4444}
+.severity-warning{background:rgba(234,179,8,.15);color:#eab308}
+.severity-info{background:rgba(59,130,246,.15);color:#3b82f6}
+.severity-pass{background:rgba(34,197,94,.15);color:#22c55e}
+.issue-tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:11px;margin:2px;background:rgba(234,179,8,.12);color:#eab308}
+.empty{text-align:center;padding:60px;color:#64748b;font-size:14px}
+.tabs{display:flex;gap:4px;margin-bottom:20px;background:#1e293b;padding:4px;border-radius:10px;flex-wrap:wrap;width:fit-content}
+.tab{padding:8px 16px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:500;color:#94a3b8;background:transparent;transition:all .2s}
+.tab.active{background:#06b6d4;color:#fff}
+.tab:hover:not(.active){color:#e2e8f0}
+.panel{display:none}
+.panel.active{display:block}
+.card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;margin-bottom:16px}
+.card h3{font-size:15px;font-weight:600;color:#f1f5f9;margin-bottom:12px}
+.rec-item{padding:12px;border-bottom:1px solid #0f172a;display:flex;gap:12px;align-items:start}
+.rec-item:last-child{border-bottom:none}
+.rec-priority{width:24px;height:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.rec-priority.high{background:rgba(239,68,68,.15);color:#ef4444}
+.rec-priority.medium{background:rgba(234,179,8,.15);color:#eab308}
+.rec-priority.low{background:rgba(59,130,246,.15);color:#3b82f6}
+.rec-text{font-size:13px;color:#e2e8f0}
+.rec-page{font-size:11px;color:#94a3b8;margin-top:4px}
+.overview-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-bottom:24px}
+.overview-card{background:#1e293b;border:1px solid #334155;border-radius:12px;padding:20px;transition:border-color .2s}
+.overview-card:hover{border-color:#06b6d4}
+.overview-card h3{font-size:14px;font-weight:600;color:#06b6d4;margin-bottom:12px;text-transform:uppercase;letter-spacing:.5px}
+.overview-card .metric{display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid #0f172a;font-size:13px}
+.overview-card .metric:last-child{border-bottom:none}
+.overview-card .metric .lbl{color:#94a3b8}
+.overview-card .metric .val{color:#f1f5f9;font-weight:600}
+.history-item{display:flex;gap:16px;padding:12px;border-bottom:1px solid #0f172a;align-items:center}
+.history-item:last-child{border-bottom:none}
+.history-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+.history-dot.links{background:#06b6d4}
+.history-dot.duplicates{background:#8b5cf6}
+.history-dot.performance{background:#f59e0b}
+.history-dot.metadata{background:#3b82f6}
+.history-dot.content{background:#22c55e}
+.history-dot.security{background:#ef4444}
+.history-text{font-size:13px;color:#e2e8f0;flex:1}
+.history-time{font-size:11px;color:#64748b;white-space:nowrap}
+.scan-running{background:rgba(6,182,212,.1);border:1px solid rgba(6,182,212,.3);border-radius:12px;padding:20px;text-align:center;margin-bottom:24px}
+.scan-running .spinner{display:inline-block;width:20px;height:20px;border:3px solid #334155;border-top-color:#06b6d4;border-radius:50%;animation:spin 1s linear infinite;margin-right:10px;vertical-align:middle}
+@keyframes spin{to{transform:rotate(360deg)}}
+.bar-chart{display:flex;align-items:flex-end;gap:16px;height:120px;padding:16px 0}
+.bar-col{display:flex;flex-direction:column;align-items:center;gap:4px;flex:1}
+.bar-col .bar{width:100%;max-width:60px;border-radius:4px 4px 0 0;transition:height .5s}
+.bar-col .bar-label{font-size:11px;color:#64748b}
+.bar-col .bar-value{font-size:12px;color:#e2e8f0;font-weight:600}
+.truncate{max-width:250px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:inline-block}
+a{color:#06b6d4;text-decoration:none}
+a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+<div class="header">
+  <div style="display:flex;align-items:center;gap:16px">
+    <a href="/agents/" class="back-link">Back to Manager</a>
+    <h1><span class="status-dot"></span><span>Maintenance</span> Agent</h1>
+  </div>
+  <div class="controls">
+    <span id="statusText" style="font-size:12px;color:#94a3b8;margin-right:8px"></span>
+    <button class="btn btn-primary" onclick="runFullScan()" id="fullScanBtn">Run Full Scan</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="stats-grid" id="statsGrid">
+    <div class="stat-card"><div class="label">Total Pages</div><div class="value teal" id="statPages">-</div></div>
+    <div class="stat-card"><div class="label">Broken Links</div><div class="value" id="statBroken">-</div></div>
+    <div class="stat-card"><div class="label">Duplicates</div><div class="value" id="statDuplicates">-</div></div>
+    <div class="stat-card"><div class="label">Avg Performance</div><div class="value" id="statPerf">-</div></div>
+    <div class="stat-card"><div class="label">Security Grade</div><div class="value" id="statSecurity">-</div></div>
+    <div class="stat-card"><div class="label">Last Scan</div><div class="value" id="statLastScan" style="font-size:14px">-</div></div>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" data-tab="overview">Overview</button>
+    <button class="tab" data-tab="links">Links</button>
+    <button class="tab" data-tab="duplicates">Duplicates</button>
+    <button class="tab" data-tab="performance">Performance</button>
+    <button class="tab" data-tab="metadata">Metadata</button>
+    <button class="tab" data-tab="content">Content</button>
+    <button class="tab" data-tab="security">Security</button>
+    <button class="tab" data-tab="history">History</button>
+  </div>
+
+  <!-- Overview Tab -->
+  <div class="panel active" id="panel-overview">
+    <div class="overview-grid" id="overviewGrid"></div>
+  </div>
+
+  <!-- Links Tab -->
+  <div class="panel" id="panel-links">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2>Broken Link Scanner</h2>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary btn-sm" onclick="triggerScan('links')">Scan Links</button>
+        <button class="btn btn-green btn-sm" onclick="fixLinks()" id="fixLinksBtn" disabled>Fix Broken Links</button>
+      </div>
+    </div>
+    <div id="linksContent"><div class="empty">No link scan results yet. Click "Scan Links" to start.</div></div>
+  </div>
+
+  <!-- Duplicates Tab -->
+  <div class="panel" id="panel-duplicates">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2>Duplicate Content Detection</h2>
+      <button class="btn btn-primary btn-sm" onclick="triggerScan('duplicates')">Scan Duplicates</button>
+    </div>
+    <div id="duplicatesContent"><div class="empty">No duplicate scan results yet. Click "Scan Duplicates" to start.</div></div>
+  </div>
+
+  <!-- Performance Tab -->
+  <div class="panel" id="panel-performance">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2>Performance Monitor</h2>
+      <button class="btn btn-primary btn-sm" onclick="triggerScan('performance')">Scan Performance</button>
+    </div>
+    <div id="performanceContent"><div class="empty">No performance scan results yet. Click "Scan Performance" to start.</div></div>
+  </div>
+
+  <!-- Metadata Tab -->
+  <div class="panel" id="panel-metadata">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2>SEO Metadata Audit</h2>
+      <button class="btn btn-primary btn-sm" onclick="triggerScan('metadata')">Audit Metadata</button>
+    </div>
+    <div id="metadataContent"><div class="empty">No metadata audit results yet. Click "Audit Metadata" to start.</div></div>
+  </div>
+
+  <!-- Content Tab -->
+  <div class="panel" id="panel-content">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2>Content Audit &amp; Recommendations</h2>
+      <button class="btn btn-primary btn-sm" onclick="triggerScan('content')">Audit Content</button>
+    </div>
+    <div id="contentContent"><div class="empty">No content audit results yet. Click "Audit Content" to start.</div></div>
+  </div>
+
+  <!-- Security Tab -->
+  <div class="panel" id="panel-security">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+      <h2>Security Scanner</h2>
+      <button class="btn btn-primary btn-sm" onclick="triggerScan('security')">Run Security Scan</button>
+    </div>
+    <div id="securityContent"><div class="empty">No security scan results yet. Click "Run Security Scan" to start.</div></div>
+  </div>
+
+  <!-- History Tab -->
+  <div class="panel" id="panel-history">
+    <h2 style="margin-bottom:16px">Scan History</h2>
+    <div class="card" id="historyContent"><div class="empty">No scan history yet.</div></div>
+  </div>
+</div>
+
+<script>
+const BASE = '';
+
+// Tab switching
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+  });
+});
+
+function timeAgo(iso) {
+  if (!iso) return 'Never';
+  const d = new Date(iso);
+  const now = new Date();
+  const diff = Math.floor((now - d) / 1000);
+  if (diff < 60) return diff + 's ago';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  return Math.floor(diff/86400) + 'd ago';
+}
+
+function gradeClass(g) { return 'grade-' + (g || 'D'); }
+function severityClass(s) { return 'severity-' + (s || 'info'); }
+
+function gradeColor(g) {
+  return {A:'#22c55e',B:'#06b6d4',C:'#eab308',D:'#ef4444'}[g] || '#64748b';
+}
+
+function valueColorClass(val, thresholds) {
+  if (val <= thresholds[0]) return 'green';
+  if (val <= thresholds[1]) return 'yellow';
+  return 'red';
+}
+
+// --- Fetch and render functions ---
+
+async function loadStatus() {
+  try {
+    const r = await fetch(BASE + '/api/status');
+    const d = await r.json();
+    document.getElementById('statusText').textContent = 'Uptime: ' + (d.uptime || '-');
+  } catch(e) {}
+}
+
+async function loadOverview() {
+  try {
+    const r = await fetch(BASE + '/api/overview');
+    const d = await r.json();
+
+    // Update stat cards
+    const pages = d.performance?.total_pages || d.content?.total_pages || d.metadata?.total_pages || 0;
+    document.getElementById('statPages').textContent = pages;
+
+    const broken = d.links?.broken_count || 0;
+    document.getElementById('statBroken').textContent = broken;
+    document.getElementById('statBroken').className = 'value ' + (broken === 0 ? 'green' : broken < 5 ? 'yellow' : 'red');
+
+    const dups = d.duplicates?.duplicate_pairs || 0;
+    document.getElementById('statDuplicates').textContent = dups;
+    document.getElementById('statDuplicates').className = 'value ' + (dups === 0 ? 'green' : 'yellow');
+
+    const grades = d.performance?.grades || {};
+    const total = Object.values(grades).reduce((a,b) => a+b, 0);
+    if (total > 0) {
+      const avgScore = ((grades.A||0)*4 + (grades.B||0)*3 + (grades.C||0)*2 + (grades.D||0)*1) / total;
+      const avgGrade = avgScore >= 3.5 ? 'A' : avgScore >= 2.5 ? 'B' : avgScore >= 1.5 ? 'C' : 'D';
+      document.getElementById('statPerf').textContent = avgGrade;
+      document.getElementById('statPerf').className = 'value';
+      document.getElementById('statPerf').style.color = gradeColor(avgGrade);
+    }
+
+    const secGrade = d.security?.grade || '-';
+    document.getElementById('statSecurity').textContent = secGrade;
+    document.getElementById('statSecurity').className = 'value';
+    document.getElementById('statSecurity').style.color = gradeColor(secGrade);
+
+    // Last scan time
+    const times = [d.links?.scanned_at, d.duplicates?.scanned_at, d.performance?.scanned_at, d.metadata?.scanned_at, d.content?.scanned_at, d.security?.scanned_at].filter(Boolean);
+    const latest = times.length ? times.sort().pop() : null;
+    document.getElementById('statLastScan').textContent = timeAgo(latest);
+
+    // Overview cards
+    const grid = document.getElementById('overviewGrid');
+    grid.innerHTML = `
+      <div class="overview-card">
+        <h3>Broken Links</h3>
+        <div class="metric"><span class="lbl">Links Checked</span><span class="val">${d.links?.total_checked || 0}</span></div>
+        <div class="metric"><span class="lbl">Broken Found</span><span class="val" style="color:${broken>0?'#ef4444':'#22c55e'}">${broken}</span></div>
+        <div class="metric"><span class="lbl">Last Scan</span><span class="val">${timeAgo(d.links?.scanned_at)}</span></div>
+      </div>
+      <div class="overview-card">
+        <h3>Duplicate Content</h3>
+        <div class="metric"><span class="lbl">Pages Scanned</span><span class="val">${d.duplicates?.total_pages || 0}</span></div>
+        <div class="metric"><span class="lbl">Duplicate Pairs</span><span class="val" style="color:${dups>0?'#eab308':'#22c55e'}">${dups}</span></div>
+        <div class="metric"><span class="lbl">Last Scan</span><span class="val">${timeAgo(d.duplicates?.scanned_at)}</span></div>
+      </div>
+      <div class="overview-card">
+        <h3>Performance</h3>
+        <div class="metric"><span class="lbl">Pages Scanned</span><span class="val">${d.performance?.total_pages || 0}</span></div>
+        <div class="metric"><span class="lbl">Avg TTFB</span><span class="val">${d.performance?.avg_ttfb_ms || 0}ms</span></div>
+        <div class="metric"><span class="lbl">Last Scan</span><span class="val">${timeAgo(d.performance?.scanned_at)}</span></div>
+      </div>
+      <div class="overview-card">
+        <h3>Metadata</h3>
+        <div class="metric"><span class="lbl">Pages Audited</span><span class="val">${d.metadata?.total_pages || 0}</span></div>
+        <div class="metric"><span class="lbl">Issues Found</span><span class="val" style="color:${(d.metadata?.total_issues||0)>0?'#eab308':'#22c55e'}">${d.metadata?.total_issues || 0}</span></div>
+        <div class="metric"><span class="lbl">Consistency</span><span class="val">${d.metadata?.consistency_score || 0}%</span></div>
+      </div>
+      <div class="overview-card">
+        <h3>Content Health</h3>
+        <div class="metric"><span class="lbl">Pages Audited</span><span class="val">${d.content?.total_pages || 0}</span></div>
+        <div class="metric"><span class="lbl">Avg Health Score</span><span class="val">${d.content?.avg_health_score || 0}/100</span></div>
+        <div class="metric"><span class="lbl">Recommendations</span><span class="val">${d.content?.recommendations || 0}</span></div>
+      </div>
+      <div class="overview-card">
+        <h3>Security</h3>
+        <div class="metric"><span class="lbl">Grade</span><span class="val"><span class="grade-badge ${gradeClass(secGrade)}">${secGrade}</span></span></div>
+        <div class="metric"><span class="lbl">Passed</span><span class="val" style="color:#22c55e">${d.security?.severity_counts?.pass || 0}</span></div>
+        <div class="metric"><span class="lbl">Warnings</span><span class="val" style="color:#eab308">${d.security?.severity_counts?.warning || 0}</span></div>
+      </div>
+    `;
+  } catch(e) { console.error('Overview load failed:', e); }
+}
+
+async function loadLinks() {
+  try {
+    const r = await fetch(BASE + '/api/links/report');
+    const d = await r.json();
+    if (d.message) { document.getElementById('linksContent').innerHTML = `<div class="empty">${d.message}</div>`; return; }
+
+    const broken = d.broken_links || [];
+    document.getElementById('fixLinksBtn').disabled = broken.length === 0;
+
+    let html = `<div class="card" style="margin-bottom:16px">
+      <div style="display:flex;gap:24px;flex-wrap:wrap">
+        <div><span style="color:#94a3b8;font-size:12px">PAGES SCANNED</span><br><strong>${d.pages_scanned}</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">LINKS CHECKED</span><br><strong>${d.total_links_checked}</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">BROKEN</span><br><strong style="color:${broken.length>0?'#ef4444':'#22c55e'}">${broken.length}</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">SKIPPED</span><br><strong>${d.skipped_domains}</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">SCAN TIME</span><br><strong>${d.elapsed_seconds}s</strong></div>
+      </div>
+    </div>`;
+
+    if (broken.length === 0) {
+      html += '<div class="empty">No broken links found!</div>';
+    } else {
+      html += `<table class="results-table"><thead><tr>
+        <th>Source Page</th><th>Broken URL</th><th>Status</th><th>Link Text</th><th>Type</th>
+      </tr></thead><tbody>`;
+      for (const bl of broken) {
+        html += `<tr>
+          <td><span class="truncate" title="${bl.source_page}">${bl.source_page}</span></td>
+          <td><span class="truncate" title="${bl.url}"><a href="${bl.url}" target="_blank">${bl.url}</a></span></td>
+          <td><span class="severity-badge severity-${bl.status_code>=500?'critical':'warning'}">${bl.status_code || bl.status}</span></td>
+          <td><span class="truncate">${bl.link_text || '-'}</span></td>
+          <td>${bl.is_internal ? '<span class="severity-badge severity-info">Internal</span>' : 'External'}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+    }
+
+    document.getElementById('linksContent').innerHTML = html;
+  } catch(e) { console.error('Links load failed:', e); }
+}
+
+async function loadDuplicates() {
+  try {
+    const r = await fetch(BASE + '/api/duplicates');
+    const d = await r.json();
+    if (d.message) { document.getElementById('duplicatesContent').innerHTML = `<div class="empty">${d.message}</div>`; return; }
+
+    const dups = d.duplicates || [];
+    let html = `<div class="card" style="margin-bottom:16px">
+      <div style="display:flex;gap:24px;flex-wrap:wrap">
+        <div><span style="color:#94a3b8;font-size:12px">PAGES SCANNED</span><br><strong>${d.total_pages}</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">DUPLICATE PAIRS</span><br><strong style="color:${dups.length>0?'#eab308':'#22c55e'}">${dups.length}</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">TITLE DUPLICATES</span><br><strong>${d.title_duplicates}</strong></div>
+      </div>
+    </div>`;
+
+    if (dups.length === 0) {
+      html += '<div class="empty">No duplicate content detected!</div>';
+    } else {
+      html += `<table class="results-table"><thead><tr>
+        <th>Page A</th><th>Page B</th><th>Similarity</th><th>Canonical Suggestion</th>
+      </tr></thead><tbody>`;
+      const canonicals = d.canonicals || [];
+      for (let i = 0; i < dups.length; i++) {
+        const dp = dups[i];
+        const canon = canonicals[i];
+        const simColor = dp.similarity > 80 ? '#ef4444' : dp.similarity > 70 ? '#eab308' : '#06b6d4';
+        html += `<tr>
+          <td><a href="${dp.page_a.url}" target="_blank">${dp.page_a.title}</a></td>
+          <td><a href="${dp.page_b.url}" target="_blank">${dp.page_b.title}</a></td>
+          <td><strong style="color:${simColor}">${dp.similarity}%</strong></td>
+          <td>${canon ? 'Keep: <strong>' + canon.canonical.title + '</strong>' : '-'}</td>
+        </tr>`;
+      }
+      html += '</tbody></table>';
+    }
+
+    document.getElementById('duplicatesContent').innerHTML = html;
+  } catch(e) { console.error('Duplicates load failed:', e); }
+}
+
+async function loadPerformance() {
+  try {
+    const r = await fetch(BASE + '/api/performance');
+    const d = await r.json();
+    if (d.message) { document.getElementById('performanceContent').innerHTML = `<div class="empty">${d.message}</div>`; return; }
+
+    const results = d.results || [];
+    const grades = d.grades || {};
+
+    let html = `<div class="card" style="margin-bottom:16px">
+      <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:flex-end">
+        <div><span style="color:#94a3b8;font-size:12px">PAGES SCANNED</span><br><strong>${d.total_pages}</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">AVG TTFB</span><br><strong>${d.avg_ttfb_ms}ms</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">AVG SIZE</span><br><strong>${(d.avg_size_bytes/1024).toFixed(0)}KB</strong></div>
+        <div style="flex:1;min-width:200px">
+          <span style="color:#94a3b8;font-size:12px">GRADE DISTRIBUTION</span>
+          <div class="bar-chart" style="height:80px">
+            ${['A','B','C','D'].map(g => `<div class="bar-col">
+              <div class="bar-value">${grades[g]||0}</div>
+              <div class="bar" style="background:${gradeColor(g)};height:${Math.max(4,(grades[g]||0)/(d.total_pages||1)*60)}px"></div>
+              <div class="bar-label">${g}</div>
+            </div>`).join('')}
+          </div>
+        </div>
+      </div>
+    </div>`;
+
+    html += `<table class="results-table"><thead><tr>
+      <th>Page</th><th>TTFB</th><th>Size</th><th>Images</th><th>Lazy %</th><th>Compression</th><th>Grade</th>
+    </tr></thead><tbody>`;
+    for (const pg of results) {
+      html += `<tr>
+        <td><span class="truncate" title="${pg.title}"><a href="${pg.url}" target="_blank">${pg.title}</a></span></td>
+        <td style="color:${pg.ttfb_ms<500?'#22c55e':pg.ttfb_ms<1000?'#eab308':'#ef4444'}">${pg.ttfb_ms}ms</td>
+        <td>${(pg.size_bytes/1024).toFixed(0)}KB</td>
+        <td>${pg.total_images}</td>
+        <td style="color:${pg.lazy_pct>=80?'#22c55e':pg.lazy_pct>=50?'#eab308':'#ef4444'}">${pg.lazy_pct}%</td>
+        <td>${pg.compression || 'none'}</td>
+        <td><span class="grade-badge ${gradeClass(pg.grade)}">${pg.grade}</span></td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+
+    document.getElementById('performanceContent').innerHTML = html;
+  } catch(e) { console.error('Performance load failed:', e); }
+}
+
+async function loadMetadata() {
+  try {
+    const r = await fetch(BASE + '/api/metadata');
+    const d = await r.json();
+    if (d.message) { document.getElementById('metadataContent').innerHTML = `<div class="empty">${d.message}</div>`; return; }
+
+    const results = d.results || [];
+    let html = `<div class="card" style="margin-bottom:16px">
+      <div style="display:flex;gap:24px;flex-wrap:wrap">
+        <div><span style="color:#94a3b8;font-size:12px">PAGES AUDITED</span><br><strong>${d.total_pages}</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">TOTAL ISSUES</span><br><strong style="color:${d.total_issues>0?'#eab308':'#22c55e'}">${d.total_issues}</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">CONSISTENCY</span><br><strong style="color:${d.consistency_score>=80?'#22c55e':d.consistency_score>=50?'#eab308':'#ef4444'}">${d.consistency_score}%</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">DUPLICATE TITLES</span><br><strong>${d.duplicate_titles?.length || 0}</strong></div>
+      </div>
+    </div>`;
+
+    html += `<table class="results-table"><thead><tr>
+      <th>Page</th><th>Title Length</th><th>Desc Length</th><th>Canonical</th><th>OG Tags</th><th>Issues</th>
+    </tr></thead><tbody>`;
+    for (const pg of results) {
+      const issues = pg.issues || [];
+      const hasOG = pg.og_title && pg.og_description && pg.og_image;
+      html += `<tr>
+        <td><span class="truncate" title="${pg.page_title}"><a href="${pg.page_url}" target="_blank">${pg.page_title}</a></span></td>
+        <td style="color:${pg.title_length>=50&&pg.title_length<=60?'#22c55e':pg.title_length>0?'#eab308':'#ef4444'}">${pg.title_length || 0}</td>
+        <td style="color:${pg.description_length>=150&&pg.description_length<=160?'#22c55e':pg.description_length>0?'#eab308':'#ef4444'}">${pg.description_length || 0}</td>
+        <td>${pg.canonical_matches ? '<span class="severity-badge severity-pass">OK</span>' : '<span class="severity-badge severity-warning">Issue</span>'}</td>
+        <td>${hasOG ? '<span class="severity-badge severity-pass">Complete</span>' : '<span class="severity-badge severity-warning">Incomplete</span>'}</td>
+        <td>${issues.length > 0 ? issues.map(i => '<span class="issue-tag">' + i.replace(/_/g,' ') + '</span>').join('') : '<span class="severity-badge severity-pass">None</span>'}</td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+
+    document.getElementById('metadataContent').innerHTML = html;
+  } catch(e) { console.error('Metadata load failed:', e); }
+}
+
+async function loadContent() {
+  try {
+    const r = await fetch(BASE + '/api/content');
+    const d = await r.json();
+    if (d.message) { document.getElementById('contentContent').innerHTML = `<div class="empty">${d.message}</div>`; return; }
+
+    const results = d.results || [];
+    const recs = d.recommendations || [];
+
+    let html = `<div class="card" style="margin-bottom:16px">
+      <div style="display:flex;gap:24px;flex-wrap:wrap">
+        <div><span style="color:#94a3b8;font-size:12px">PAGES AUDITED</span><br><strong>${d.total_pages}</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">AVG HEALTH</span><br><strong style="color:${d.avg_health_score>=70?'#22c55e':d.avg_health_score>=40?'#eab308':'#ef4444'}">${d.avg_health_score}/100</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">RECOMMENDATIONS</span><br><strong>${recs.length}</strong></div>
+      </div>
+    </div>`;
+
+    // Recommendations
+    if (recs.length > 0) {
+      html += '<div class="card" style="margin-bottom:16px"><h3>Recommendations</h3>';
+      for (const rec of recs.slice(0, 20)) {
+        const pClass = rec.impact === 'high' ? 'high' : rec.impact === 'medium' ? 'medium' : 'low';
+        html += `<div class="rec-item">
+          <div class="rec-priority ${pClass}">${rec.priority}</div>
+          <div><div class="rec-text">${rec.message}</div><div class="rec-page"><a href="${rec.url}" target="_blank">${rec.page}</a></div></div>
+        </div>`;
+      }
+      html += '</div>';
+    }
+
+    // Content table
+    html += `<table class="results-table"><thead><tr>
+      <th>Page</th><th>Words</th><th>Last Updated</th><th>Links</th><th>Images</th><th>H2s</th><th>Health</th>
+    </tr></thead><tbody>`;
+    for (const pg of results) {
+      const healthColor = pg.health_score >= 70 ? '#22c55e' : pg.health_score >= 40 ? '#eab308' : '#ef4444';
+      html += `<tr>
+        <td><span class="truncate" title="${pg.title}"><a href="${pg.url}" target="_blank">${pg.title}</a></span></td>
+        <td style="color:${pg.word_count>=300?'#22c55e':pg.word_count>=100?'#eab308':'#ef4444'}">${pg.word_count}</td>
+        <td style="color:${pg.days_since_update<=90?'#22c55e':pg.days_since_update<=180?'#eab308':'#ef4444'}">${pg.days_since_update}d ago</td>
+        <td>${pg.internal_links}</td>
+        <td>${pg.images}</td>
+        <td>${pg.headings?.h2 || 0}</td>
+        <td><strong style="color:${healthColor}">${pg.health_score}</strong></td>
+      </tr>`;
+    }
+    html += '</tbody></table>';
+
+    document.getElementById('contentContent').innerHTML = html;
+  } catch(e) { console.error('Content load failed:', e); }
+}
+
+async function loadSecurity() {
+  try {
+    const r = await fetch(BASE + '/api/security');
+    const d = await r.json();
+    if (d.message) { document.getElementById('securityContent').innerHTML = `<div class="empty">${d.message}</div>`; return; }
+
+    const findings = d.findings || [];
+    const sc = d.severity_counts || {};
+
+    let html = `<div class="card" style="margin-bottom:16px">
+      <div style="display:flex;gap:24px;flex-wrap:wrap;align-items:center">
+        <div style="text-align:center">
+          <span style="color:#94a3b8;font-size:12px">SECURITY GRADE</span><br>
+          <span class="grade-badge ${gradeClass(d.grade)}" style="font-size:32px;padding:8px 24px;margin-top:8px;display:inline-block">${d.grade}</span>
+        </div>
+        <div><span style="color:#94a3b8;font-size:12px">PASSED</span><br><strong style="color:#22c55e">${sc.pass||0}</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">WARNINGS</span><br><strong style="color:#eab308">${sc.warning||0}</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">CRITICAL</span><br><strong style="color:#ef4444">${sc.critical||0}</strong></div>
+        <div><span style="color:#94a3b8;font-size:12px">INFO</span><br><strong style="color:#3b82f6">${sc.info||0}</strong></div>
+      </div>
+    </div>`;
+
+    if (d.ssl) {
+      html += `<div class="card" style="margin-bottom:16px"><h3>SSL Certificate</h3>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;margin-top:8px">
+          <div><span style="color:#94a3b8;font-size:12px">STATUS</span><br><strong style="color:${d.ssl.valid?'#22c55e':'#ef4444'}">${d.ssl.valid?'Valid':'Invalid'}</strong></div>
+          <div><span style="color:#94a3b8;font-size:12px">ISSUER</span><br><strong>${d.ssl.issuer||'-'}</strong></div>
+          <div><span style="color:#94a3b8;font-size:12px">DAYS REMAINING</span><br><strong style="color:${d.ssl.days_remaining>30?'#22c55e':d.ssl.days_remaining>7?'#eab308':'#ef4444'}">${d.ssl.days_remaining||0}</strong></div>
+        </div>
+      </div>`;
+    }
+
+    html += '<div class="card"><h3>Findings</h3>';
+    for (const f of findings) {
+      html += `<div style="display:flex;gap:12px;padding:10px;border-bottom:1px solid #0f172a;align-items:center">
+        <span class="severity-badge ${severityClass(f.status)}">${f.status.toUpperCase()}</span>
+        <div><strong style="font-size:13px;color:#f1f5f9">${f.check}</strong><div style="font-size:12px;color:#94a3b8;margin-top:2px">${f.message}</div></div>
+      </div>`;
+    }
+    html += '</div>';
+
+    document.getElementById('securityContent').innerHTML = html;
+  } catch(e) { console.error('Security load failed:', e); }
+}
+
+async function loadHistory() {
+  try {
+    const r = await fetch(BASE + '/api/history');
+    const d = await r.json();
+    const items = d.history || [];
+    if (items.length === 0) {
+      document.getElementById('historyContent').innerHTML = '<div class="empty">No scan history yet.</div>';
+      return;
+    }
+
+    let html = '';
+    for (const item of items) {
+      html += `<div class="history-item">
+        <div class="history-dot ${item.type}"></div>
+        <div class="history-text"><strong style="text-transform:capitalize">${item.type}</strong> - ${item.summary}</div>
+        <div class="history-time">${timeAgo(item.time)}</div>
+      </div>`;
+    }
+    document.getElementById('historyContent').innerHTML = html;
+  } catch(e) { console.error('History load failed:', e); }
+}
+
+// --- Actions ---
+
+async function triggerScan(type) {
+  const endpoints = {
+    links: '/api/links/scan',
+    duplicates: '/api/duplicates/scan',
+    performance: '/api/performance/scan',
+    metadata: '/api/metadata/scan',
+    content: '/api/content/scan',
+    security: '/api/security/scan',
+  };
+  try {
+    await fetch(BASE + endpoints[type], {method:'POST'});
+    const container = document.getElementById(type + 'Content') || document.getElementById(type === 'content' ? 'contentContent' : type + 'Content');
+    if (container) {
+      container.innerHTML = `<div class="scan-running"><span class="spinner"></span>Scanning in progress... This may take a few minutes. Refresh to see results.</div>`;
+    }
+  } catch(e) { alert('Failed to start scan: ' + e.message); }
+}
+
+async function runFullScan() {
+  const btn = document.getElementById('fullScanBtn');
+  btn.disabled = true;
+  btn.textContent = 'Scanning...';
+  try {
+    await Promise.all([
+      fetch(BASE + '/api/links/scan', {method:'POST'}),
+      fetch(BASE + '/api/duplicates/scan', {method:'POST'}),
+      fetch(BASE + '/api/performance/scan', {method:'POST'}),
+      fetch(BASE + '/api/metadata/scan', {method:'POST'}),
+      fetch(BASE + '/api/content/scan', {method:'POST'}),
+      fetch(BASE + '/api/security/scan', {method:'POST'}),
+    ]);
+    setTimeout(() => { btn.disabled = false; btn.textContent = 'Run Full Scan'; }, 5000);
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Run Full Scan';
+    alert('Failed to start full scan: ' + e.message);
+  }
+}
+
+async function fixLinks() {
+  const btn = document.getElementById('fixLinksBtn');
+  btn.disabled = true;
+  btn.textContent = 'Fixing...';
+  try {
+    const r = await fetch(BASE + '/api/links/fix', {method:'POST'});
+    const d = await r.json();
+    alert('Fixed ' + (d.fixed || 0) + ' broken links.');
+    loadLinks();
+  } catch(e) {
+    alert('Fix failed: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Fix Broken Links';
+  }
+}
+
+// --- Init ---
+
+async function init() {
+  await loadStatus();
+  await loadOverview();
+  loadLinks();
+  loadDuplicates();
+  loadPerformance();
+  loadMetadata();
+  loadContent();
+  loadSecurity();
+  loadHistory();
+}
+
+init();
+setInterval(loadStatus, 30000);
+setInterval(loadOverview, 60000);
+</script>
+</body>
+</html>

@@ -207,23 +207,23 @@ async def lifespan(app: FastAPI):
     # Heartbeat
     scheduler.add_job(send_heartbeat, "interval", seconds=settings.HEARTBEAT_INTERVAL, id="heartbeat")
 
-    # Link scan: weekly Sunday 6am UTC
-    scheduler.add_job(scheduled_link_scan, CronTrigger(day_of_week="sun", hour=6, minute=0), id="link_scan")
+    # Link scan: every 2 days (Mon/Wed/Fri/Sun 6am UTC)
+    scheduler.add_job(scheduled_link_scan, CronTrigger(day_of_week="mon,wed,fri,sun", hour=6, minute=0), id="link_scan")
 
-    # Duplicate detection: weekly Sunday 7am UTC
-    scheduler.add_job(scheduled_duplicate_scan, CronTrigger(day_of_week="sun", hour=7, minute=0), id="duplicate_scan")
+    # Duplicate detection: every 3 days (Mon/Thu 7am UTC)
+    scheduler.add_job(scheduled_duplicate_scan, CronTrigger(day_of_week="mon,thu", hour=7, minute=0), id="duplicate_scan")
 
     # Performance monitoring: daily 5am UTC
     scheduler.add_job(scheduled_performance_scan, CronTrigger(hour=5, minute=0), id="performance_scan")
 
-    # Metadata audit: weekly Monday 3am UTC
-    scheduler.add_job(scheduled_metadata_audit, CronTrigger(day_of_week="mon", hour=3, minute=0), id="metadata_audit")
+    # Metadata audit: every 2 days (Mon/Wed/Fri 3am UTC)
+    scheduler.add_job(scheduled_metadata_audit, CronTrigger(day_of_week="mon,wed,fri", hour=3, minute=0), id="metadata_audit")
 
-    # Content audit: weekly Monday 4am UTC
-    scheduler.add_job(scheduled_content_audit, CronTrigger(day_of_week="mon", hour=4, minute=0), id="content_audit")
+    # Content audit: every 3 days (Tue/Fri 4am UTC)
+    scheduler.add_job(scheduled_content_audit, CronTrigger(day_of_week="tue,fri", hour=4, minute=0), id="content_audit")
 
-    # Security scan: weekly Wednesday 3am UTC
-    scheduler.add_job(scheduled_security_scan, CronTrigger(day_of_week="wed", hour=3, minute=0), id="security_scan")
+    # Security scan: every 3 days (Mon/Thu/Sun 3am UTC)
+    scheduler.add_job(scheduled_security_scan, CronTrigger(day_of_week="mon,thu,sun", hour=3, minute=0), id="security_scan")
 
     scheduler.start()
     await send_heartbeat()
